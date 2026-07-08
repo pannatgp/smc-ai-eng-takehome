@@ -20,7 +20,9 @@ services:
       retries: 10
 
   pinecone-local:
-    image: ghcr.io/pinecone-io/pinecone-local:latest
+    # Pin to v0.7.0: :latest tracks the v1.0.0 release candidate, which segfaults
+    # under x86 emulation on Apple Silicon. v0.7.0 runs cleanly.
+    image: ghcr.io/pinecone-io/pinecone-local:v0.7.0
     container_name: smc-pinecone-local
     platform: linux/amd64
     environment:

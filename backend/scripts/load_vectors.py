@@ -41,7 +41,11 @@ def ensure_index(pc: Pinecone) -> str:
             spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             deletion_protection="disabled",
         )
-    return pc.describe_index(INDEX_NAME).host
+    host = pc.describe_index(INDEX_NAME).host
+    # pinecone-local advertises the index host as https:// but serves plaintext http.
+    if PINECONE_HOST.startswith("http://") and host.startswith("https://"):
+        host = "http://" + host[len("https://") :]
+    return host
 
 
 def load_records():

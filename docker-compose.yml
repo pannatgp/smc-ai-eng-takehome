@@ -1,0 +1,35 @@
+services:
+  postgres:
+    # alpine (musl) variant: the debian postgres:16 image segfaults in initdb on
+    # Docker Desktop for Apple Silicon; the musl build initializes cleanly.
+    image: postgres:16-alpine
+    container_name: smc-postgres
+    environment:
+      POSTGRES_USER: smc
+      POSTGRES_PASSWORD: smc
+      POSTGRES_DB: smc
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./data/financial_data.sql:/docker-entrypoint-initdb.d/01_financial_data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smc -d smc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pinecone-local:
+    image: ghcr.io/pinecone-io/pinecone-local:latest
+    container_name: smc-pinecone-local
+    platform: linux/amd64
+    environment:
+      PORT: 5080
+      PINECONE_HOST: localhost
+    ports:
+      - "5080-5090:5080-5090"
+
+volumes:
+  pgdata:
+
+

@@ -1,0 +1,193 @@
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-form {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 32px;
+  border: 1px solid #333;
+  border-radius: 12px;
+}
+
+.auth-form h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.auth-subtitle {
+  margin: 0 0 8px;
+  opacity: 0.7;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.auth-form input {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #555;
+  background: transparent;
+  color: inherit;
+}
+
+.auth-error,
+.chat-error {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+}
+
+.auth-toggle {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.chat-page {
+  max-width: 720px;
+  margin: 0 auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.chat-header h1 {
+  font-size: 1.2rem;
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+}
+
+.message-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.message-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.message-bubble {
+  padding: 10px 14px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.message-user .message-bubble {
+  background: #2b5fd9;
+  color: white;
+}
+
+.message-assistant .message-bubble {
+  background: #2a2a2a;
+}
+
+.typing {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.citation-panel {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.citation-table {
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
+
+.citation-table th,
+.citation-table td {
+  border: 1px solid #444;
+  padding: 4px 8px;
+  text-align: right;
+}
+
+.citation-table th:first-child,
+.citation-table td:first-child {
+  text-align: left;
+}
+
+.citation-chips {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.citation-chips li {
+  background: #333;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+}
+
+.message-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.message-input input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #555;
+  background: transparent;
+  color: inherit;
+}
+
+.message-input button,
+.auth-form button[type='submit'] {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #2b5fd9;
+  color: white;
+  cursor: pointer;
+}
+
+.message-input button:disabled,
+.auth-form button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

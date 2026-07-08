@@ -3,8 +3,11 @@ import type { ChatResponse, MessageOut } from './types'
 export const API_BASE_URL = 'http://localhost:8000'
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  status: number
+
+  constructor(status: number, message: string) {
     super(message)
+    this.status = status
   }
 }
 

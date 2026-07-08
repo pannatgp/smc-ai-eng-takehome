@@ -101,9 +101,11 @@ This starts:
   `docker-entrypoint-initdb.d` (192 rows).
 - **Pinecone-local** on `:5080` — an ephemeral in-memory index (no persistence).
 
-> **Note:** the compose file pins `postgres:16-alpine`. The Debian `postgres:16` image
-> segfaults in `initdb` on Docker Desktop for Apple Silicon; the musl (alpine) build is a
-> drop-in fix.
+> **Apple Silicon notes:** the compose file pins `postgres:16-alpine` (the Debian
+> `postgres:16` image segfaults in `initdb` under Docker Desktop on Apple Silicon) and
+> `pinecone-local:v0.7.0` (the `:latest` tag tracks a v1.0.0 release candidate that
+> segfaults under x86 emulation). Both run cleanly. Enable **Docker Desktop → Settings →
+> Use Rosetta for x86/amd64 emulation** for the smoothest experience.
 
 Verify the SQL loaded:
 
@@ -154,6 +156,26 @@ Register/login, then ask (Thai — the assistant answers in the user's language)
 **Negative / refusal case** — proves no-hallucination behavior (not in the data):
 
 - What was Tesla's R&D spend? → the assistant states it has no such data rather than inventing a figure.
+
+Q3 is the deliberate coverage trap: Microsoft has SQL revenue but **no 10-K text**. A correct
+answer computes the growth rate for all four companies (Meta is highest at ~22%), reports
+Microsoft's numbers, and explicitly declines to give a qualitative "why" for Microsoft rather
+than inventing one.
+
+---
+
+## Troubleshooting
+
+- **`role "smc" does not exist` on backend startup** — a native Postgres on your host is
+  occupying port 5432 and shadowing the container. Stop it (`brew services stop postgresql@14`)
+  or remap the container's published port in `docker-compose.yml`.
+- **`SSL: WRONG_VERSION_NUMBER` when loading/querying vectors** — pinecone-local advertises its
+  index host as `https://` but serves plaintext `http`. The code rewrites the scheme for local
+  hosts; if you point at a real Pinecone, keep `https`.
+- **Vector search returns nothing** — pinecone-local is in-memory and wiped on restart. Re-run
+  `python -m scripts.load_vectors`.
+- **A DB container exits 139 (segfault)** — see the Apple Silicon notes above; use the pinned
+  image tags and enable Rosetta.
 
 ---
 

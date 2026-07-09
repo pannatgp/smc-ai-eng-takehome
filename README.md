@@ -9,6 +9,9 @@ rather than hallucinate** when the data isn't there.
 - **Frontend:** React + Vite + TypeScript
 - **Data:** PostgreSQL (income-statement figures) + Pinecone-local (10-K chunks)
 
+📄 For a full walkthrough of the system — architecture, request lifecycle, anti-hallucination
+design, security, and extensibility — see [`docs/TECH_REPORT.md`](docs/TECH_REPORT.md).
+
 ---
 
 ## Architecture at a glance

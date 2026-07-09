@@ -1,14 +1,25 @@
-from langchain_core.tools import tool
+"""Data-access functions for the graph nodes.
+
+These are plain functions (not LLM-bound tools): the graph orchestrates them
+deterministically. `query_financials` builds a parameterized SQL query itself — no
+text-to-SQL — so there is no injection surface and no hallucinated columns.
+"""
+
 from sqlalchemy import text
 
-from app.agent.aliases import resolve_sql_company, resolve_vector_source
+from app.agent.aliases import resolve_sql_company
 from app.agent.vector_client import embed_query, get_index
 from app.db import engine
+from app.registry import resolve_source
 
 FINANCIALS_COLUMNS = "company, ticker, sector, year, revenue, gross_profit, operating_income, net_income"
 
 
-def _get_financials(companies: list[str] | None, years: list[int] | None) -> dict:
+def query_financials(companies: list[str] | None, years: list[int] | None) -> dict:
+    """Look up income-statement figures from the financial_data table.
+
+    Returns {"rows": [...], "not_found": [companies with no row]}.
+    """
     resolved = [resolve_sql_company(c) for c in companies] if companies else None
 
     sql = f"SELECT {FINANCIALS_COLUMNS} FROM financial_data WHERE 1=1"
@@ -24,29 +35,24 @@ def _get_financials(companies: list[str] | None, years: list[int] | None) -> dic
     with engine.connect() as conn:
         rows = [dict(row) for row in conn.execute(text(sql), params).mappings().all()]
 
-    found_names = {row["company"].lower() for row in rows} | {row["ticker"].lower() for row in rows}
-    not_found = [c for c in (companies or []) if resolve_sql_company(c).lower() not in found_names]
+    found = {row["company"].lower() for row in rows} | {row["ticker"].lower() for row in rows}
+    not_found = [c for c in (companies or []) if resolve_sql_company(c).lower() not in found]
 
     return {"rows": rows, "not_found": not_found}
 
 
-def _vector_search(query: str, companies: list[str] | None, top_k: int) -> dict:
-    source_filter = None
-    unavailable: list[str] = []
+def search_filings(query: str, company: str | None = None, top_k: int = 3) -> dict:
+    """Semantic search over 10-K text. If `company` is given, filter to its filing.
 
-    if companies:
-        sources = []
-        for company in companies:
-            source = resolve_vector_source(company)
-            if source:
-                sources.append(source)
-            else:
-                unavailable.append(company)
-        if sources:
-            source_filter = {"source": {"$in": sources}}
-        else:
-            # None of the requested companies have any 10-K filing indexed at all.
-            return {"matches": [], "unavailable_companies": unavailable}
+    Returns {"matches": [...], "available": bool}. `available` is False when a specific
+    company was requested but has no filing in the vector store.
+    """
+    source_filter = None
+    if company is not None:
+        source = resolve_source(company)
+        if source is None:
+            return {"matches": [], "available": False}
+        source_filter = {"source": {"$in": [source]}}
 
     index = get_index()
     vector = embed_query(query)
@@ -68,30 +74,4 @@ def _vector_search(query: str, companies: list[str] | None, top_k: int) -> dict:
         }
         for match in result["matches"]
     ]
-    return {"matches": matches, "unavailable_companies": unavailable}
-
-
-@tool
-def get_financials(companies: list[str] | None = None, years: list[int] | None = None) -> dict:
-    """Look up structured income-statement figures (revenue, gross_profit, operating_income,
-    net_income) from the financial_data SQL table. `companies` accepts company names or
-    tickers (e.g. "Apple", "AAPL", "Google", "Facebook" all resolve correctly). `years`
-    filters to specific fiscal years (2022-2025). Omit either argument to fetch all rows
-    for that dimension. Always call this before stating any dollar figure or growth
-    percentage. If a requested company is not found, it is listed under "not_found" —
-    report that explicitly rather than guessing numbers for it.
-    """
-    return _get_financials(companies, years)
-
-
-@tool
-def vector_search(query: str, companies: list[str] | None = None, top_k: int = 5) -> dict:
-    """Search the 10-K filing text (qualitative/strategy content) for the most relevant
-    chunks matching `query`. Only four companies have any 10-K text indexed at all: Apple,
-    Amazon, Alphabet (aka Google), and Meta (aka Facebook). `companies` filters results to
-    those company's filing(s) only; omit it to search across all indexed filings. If a
-    requested company has no 10-K indexed, it is listed under "unavailable_companies" —
-    you MUST report that no filing text is available for it rather than inventing an
-    explanation.
-    """
-    return _vector_search(query, companies, top_k)
+    return {"matches": matches, "available": True}

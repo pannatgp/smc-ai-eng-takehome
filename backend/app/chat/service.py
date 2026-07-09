@@ -10,6 +10,9 @@ from app.schemas import ChatResponse, Citations, SqlCitation, VectorCitation
 
 HISTORY_LIMIT = 20
 
+_SQL_FIELDS = ("company", "ticker", "year", "revenue", "gross_profit", "operating_income", "net_income")
+_VECTOR_FIELDS = ("source", "page", "page_label", "snippet")
+
 
 def _load_history(db: Session, user_id: uuid.UUID) -> list:
     rows = (
@@ -33,37 +36,34 @@ def _load_history(db: Session, user_id: uuid.UUID) -> list:
     return messages
 
 
-def _flatten_citations(raw_citations: list[dict]) -> Citations:
-    sql_rows: list[SqlCitation] = []
+def _build_citations(sql_rows: list[dict], vector_matches: list[dict]) -> Citations:
+    sql_citations: list[SqlCitation] = []
     seen_sql: set[tuple] = set()
-    vector_matches: list[VectorCitation] = []
+    for row in sql_rows:
+        key = (row["company"], row["year"])
+        if key in seen_sql:
+            continue
+        seen_sql.add(key)
+        sql_citations.append(SqlCitation(**{k: row.get(k) for k in _SQL_FIELDS}))
+
+    vector_citations: list[VectorCitation] = []
     seen_vector: set[tuple] = set()
+    for match in vector_matches:
+        key = (match["source"], match.get("page"))
+        if key in seen_vector:
+            continue
+        seen_vector.add(key)
+        vector_citations.append(VectorCitation(**{k: match.get(k) for k in _VECTOR_FIELDS}))
 
-    for entry in raw_citations:
-        if entry["type"] == "sql":
-            for row in entry["data"]:
-                key = (row["company"], row["year"])
-                if key in seen_sql:
-                    continue
-                seen_sql.add(key)
-                sql_rows.append(SqlCitation(**row))
-        elif entry["type"] == "vector":
-            for match in entry["data"]:
-                key = (match["source"], match.get("page"))
-                if key in seen_vector:
-                    continue
-                seen_vector.add(key)
-                vector_matches.append(VectorCitation(**match))
-
-    return Citations(sql=sql_rows, vector=vector_matches)
+    return Citations(sql=sql_citations, vector=vector_citations)
 
 
 def ask(db: Session, user_id: uuid.UUID, question: str) -> ChatResponse:
     history = _load_history(db, user_id)
-    result = compiled_graph.invoke({"messages": [*history, HumanMessage(content=question)], "citations": []})
+    result = compiled_graph.invoke({"question": question, "history": history})
 
-    answer = result["messages"][-1].content
-    citations = _flatten_citations(result["citations"])
+    answer = result["answer"]
+    citations = _build_citations(result.get("sql_rows", []), result.get("vector_matches", []))
 
     db.add(Message(user_id=user_id, role="user", content=question))
     db.add(

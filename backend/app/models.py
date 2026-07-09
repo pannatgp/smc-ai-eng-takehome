@@ -23,6 +23,17 @@ class User(Base):
     messages: Mapped[list["Message"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
+class VectorRegistry(Base):
+    """Which companies have 10-K text in the vector store. Populated by the ingest path
+    (scripts/load_vectors.py) so the router never claims a filing that isn't indexed."""
+
+    __tablename__ = "vector_registry"
+
+    company_key: Mapped[str] = mapped_column(String(100), primary_key=True)  # e.g. "alphabet"
+    source: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g. "Alphabet_10K_FY2025.pdf"
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
 class Message(Base):
     __tablename__ = "messages"
 

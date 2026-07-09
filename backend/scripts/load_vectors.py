@@ -22,6 +22,9 @@ from pinecone import Pinecone, ServerlessSpec
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
+# imported after load_dotenv so app.config picks up the environment
+from app.registry import register_sources  # noqa: E402
+
 FIXTURE_PATH = REPO_ROOT / "data" / "pinecone_vectors.jsonl.gz"
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", "pclocal")
 PINECONE_HOST = os.environ.get("PINECONE_HOST", "http://localhost:5080")
@@ -73,9 +76,13 @@ def main() -> None:
     batch: list[dict] = []
     namespace = "__default__"
     total = 0
+    sources: set[str] = set()
 
     for vector, ns in load_records():
         namespace = ns
+        source = vector["metadata"].get("source")
+        if source:
+            sources.add(source)
         batch.append(vector)
         if len(batch) >= BATCH_SIZE:
             index.upsert(vectors=batch, namespace=namespace)
@@ -87,8 +94,14 @@ def main() -> None:
         index.upsert(vectors=batch, namespace=namespace)
         total += len(batch)
 
+    # Register what we ingested so the app's router knows which companies are searchable,
+    # without hardcoding a company list. This is the ingest path a future upload endpoint
+    # would reuse: upsert to Pinecone + register the source, together.
+    register_sources(sources)
+
     stats = index.describe_index_stats()
-    print(f"Done. Upserted {total} vectors this run. Index stats: {stats}")
+    print(f"Done. Upserted {total} vectors this run. Registered sources: {sorted(sources)}")
+    print(f"Index stats: {stats}")
 
 
 if __name__ == "__main__":

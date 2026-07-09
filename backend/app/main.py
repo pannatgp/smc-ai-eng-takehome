@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.db import Base, engine
-from app.models import Message, User  # noqa: F401 (ensures models are registered before create_all)
+from app.models import Message, User, VectorRegistry  # noqa: F401 (register models before create_all)
 
 app = FastAPI(title="Financial Q&A Chatbot")
 

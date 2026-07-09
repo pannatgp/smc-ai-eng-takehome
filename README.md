@@ -14,44 +14,54 @@ rather than hallucinate** when the data isn't there.
 ## Architecture at a glance
 
 ```
-                       ┌──────────────────────────────────────────┐
-  React (Vite)  ──JWT──▶  FastAPI                                   │
-  login + chat        │    /auth/register  /auth/login             │
-                      │    /chat  /chat/history  (auth-protected)  │
-                      │                                            │
-                      │    LangGraph ReAct agent                   │
-                      │      ├─ get_financials ──▶ PostgreSQL       │
-                      │      └─ vector_search  ──▶ Pinecone-local   │
-                      └──────────────────────────────────────────┘
+   React (Vite) ──JWT──▶ FastAPI  /auth/register  /auth/login  /chat  /chat/history
+                                        │
+                                        ▼
+   LangGraph — deterministic nodes with conditional edges (app/agent/graph.py)
+
+     extract ─▶ [needs_financials?] ─▶ sql ─▶ [needs_qualitative?] ─▶ vector ─▶ synthesize
+     (LLM)      └▶ (qualitative only) ─▶ vector ─┘         └▶ synthesize ─┘        (LLM)
+                                         │                                            │
+                          get_financials │ (Postgres, growth computed in Python)      │ Thai/EN
+                          search_filings │ (Pinecone, per-company; registry gate)     ▼
+                                                                                    answer + citations
 ```
 
-The agent decides **per question** which tool(s) to call:
+Routing is decided in **code**, not by the LLM. The LLM is used only at the edges — to
+extract search parameters (companies, years, intent) and to phrase the final grounded
+answer. This makes the anti-hallucination behaviour a property of the control flow rather
+than of prompt adherence. Per question:
 
-- **Q1** (Apple net income 2022–2025) → SQL only
-- **Q2** (Google vs. Facebook revenue structure & strategy) → SQL + vector
-- **Q3** (highest revenue growth among MSFT/AAPL/GOOG/FB + why) → SQL for every company,
-  vector only where a 10-K exists
+- **Q1** (Apple net income) → `extract → sql → synthesize` (no vector)
+- **Q2** (Google vs. Facebook structure & strategy) → `extract → sql → vector → synthesize`
+- **Q3** (highest growth among MSFT/AAPL/GOOG/FB + why) → same, with growth computed in
+  Python and the vector step run **per company**, so only filers get factors
 
 ### Key design decisions
 
-- **Parameterized SQL tool, not text-to-SQL.** `get_financials(companies, years)` builds the
-  query itself from a fixed column list. This eliminates SQL injection and hallucinated column
-  names, and is easy to reason about in review. Company/ticker aliasing (Google↔Alphabet,
-  Facebook↔Meta) is resolved in one place (`app/agent/aliases.py`).
-- **Option A for vectors (use the fixture).** We upsert the provided
-  `pinecone_vectors.jsonl.gz` as-is rather than re-embedding the PDFs — it preserves API budget
-  and guarantees the query embedder matches the index. Query embeddings therefore **must** use
-  OpenAI `text-embedding-3-small` at `dimensions=512` (see `app/agent/vector_client.py`).
-- **Anti-hallucination is explicit and visible.** The system prompt
-  (`app/agent/prompts.py`) forbids stating any figure or fact not returned by a tool. Tools
-  return `not_found` / `unavailable_companies` lists, and the prompt requires the model to
-  surface those gaps. The deliberate coverage trap — Microsoft has SQL numbers but **no 10-K
-  text** — is handled by answering the number and explicitly stating no filing text is
-  available to explain "why".
-- **Citations flow to the UI.** Every answer returns the SQL rows and 10-K chunks
-  (source PDF + page) it used; the frontend renders them under each answer as proof of grounding.
+- **Deterministic graph, LLM at the edges.** Growth rates are computed in Python (exact, no
+  LLM arithmetic), the "does this company have a filing?" gate is a real branch, and the
+  non-filer fallback is structural — so the coverage trap can't be prompt-defeated.
+- **Dynamic filing registry, not a hardcoded list.** `vector_registry` (Postgres) is
+  populated by the ingest path (`scripts/load_vectors.py`) from the sources actually upserted
+  into Pinecone, so it can never claim a filing that isn't indexed. `app/registry.py` reads
+  it; adding a new 10-K (even a surprise one) needs no code change — ingest it and the router
+  picks it up. The only hardcoded knowledge is the brand→filer alias (Google→Alphabet,
+  Facebook→Meta), which no data source can supply.
+- **Parameterized SQL, not text-to-SQL.** `query_financials(companies, years)` builds the
+  query from a fixed column list — no injection surface, no hallucinated columns. SQL-name
+  aliasing lives in `app/agent/aliases.py`.
+- **Option A for vectors (use the fixture).** We upsert `pinecone_vectors.jsonl.gz` as-is
+  rather than re-embedding — it preserves API budget and guarantees the query embedder matches
+  the index (OpenAI `text-embedding-3-small` at `dimensions=512`, see `vector_client.py`).
+- **Anti-hallucination.** `synthesize_node` is handed a structured DATA CONTEXT (SQL rows,
+  computed growth, 10-K excerpts, and an explicit "NO 10-K FILING AVAILABLE" list) and told to
+  use nothing else. Microsoft (SQL numbers, no 10-K) gets its number and an explicit "no
+  filing" note; a company with a filing but no matching passage reads differently.
+- **Citations flow to the UI.** Every answer returns the SQL rows and 10-K chunks it used;
+  the frontend renders them under each answer as proof of grounding.
 - **Auth is a separable module** (`app/auth/`) — JWT + bcrypt, `OAuth2PasswordBearer` guarding
-  the chat routes — so roles/refresh-tokens/OAuth can be added without touching the agent.
+  the chat routes — so roles/refresh-tokens/OAuth can be added without touching the graph.
 
 ### Data coverage (important)
 
@@ -186,17 +196,18 @@ backend/
   app/
     main.py              FastAPI app + CORS + startup table creation
     config.py            pydantic-settings, reads ../.env
-    db.py, models.py     SQLAlchemy engine + User/Message models
+    db.py, models.py     SQLAlchemy engine + User/Message/VectorRegistry models
     schemas.py           Pydantic request/response + citation shapes
+    registry.py          dynamic "which companies have a 10-K" lookup (reads vector_registry)
     auth/                register/login, JWT, bcrypt, OAuth2 dependency
-    chat/                chat + history routes, orchestration service
+    chat/                chat + history routes, orchestration + citation building
     agent/
-      graph.py           LangGraph ReAct loop (agent ⇄ tools)
-      tools.py           get_financials (SQL) + vector_search (Pinecone)
+      graph.py           LangGraph nodes + conditional edges (extract→sql→vector→synthesize)
+      tools.py           query_financials (SQL) + search_filings (Pinecone)
       vector_client.py   OpenAI embeddings + Pinecone client
-      aliases.py         Google↔Alphabet / Facebook↔Meta resolution
-      prompts.py         anti-hallucination system prompt
-  scripts/load_vectors.py  upserts the Pinecone fixture (Option A)
+      aliases.py         SQL-name aliasing (Google↔Alphabet / Facebook↔Meta)
+      prompts.py         extraction + synthesis prompts
+  scripts/load_vectors.py  upserts the Pinecone fixture (Option A) + registers sources
 frontend/
   src/auth/              auth context + login/register page
   src/chat/              chat page, message list, input, citation panel

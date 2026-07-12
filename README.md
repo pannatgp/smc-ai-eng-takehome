@@ -175,6 +175,20 @@ answer computes the growth rate for all four companies (Meta is highest at ~22%)
 Microsoft's numbers, and explicitly declines to give a qualitative "why" for Microsoft rather
 than inventing one.
 
+### Screenshots from the running app
+
+**Q1 — Apple net income 2022–2025** (SQL only, figures cited per year):
+
+![Q1 — Apple net income 2022–2025](screenshots/q1_screenshot_running_app.png)
+
+**Q2 — Google vs. Facebook revenue structure & strategy** (SQL + 10-K excerpts, cited by file and page):
+
+![Q2 — Google vs Facebook comparison](screenshots/q2_screenshot_running_app.png)
+
+**Q3 — highest growth 2024–2025** (growth computed in Python, Meta leads at 22.17%; note the explicit "no 10-K available" line for Microsoft — the anti-hallucination behaviour in action):
+
+![Q3 — growth comparison with Microsoft no-10-K note](screenshots/q3_screenshot_running_app.png)
+
 ---
 
 ## Troubleshooting

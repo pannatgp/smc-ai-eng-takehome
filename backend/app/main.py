@@ -10,7 +10,10 @@ app = FastAPI(title="Financial Q&A Chatbot")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    # Accept the Vite dev server on any localhost/127.0.0.1 port. Vite falls back to
+    # 5174, 5175, ... when 5173 is taken, and localhost vs 127.0.0.1 are distinct
+    # origins — pinning a single one silently breaks auth with a CORS error.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
